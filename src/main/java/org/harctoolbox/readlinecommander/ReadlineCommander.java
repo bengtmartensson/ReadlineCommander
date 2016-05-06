@@ -41,12 +41,13 @@ import org.harctoolbox.harchardware.comm.LocalSerialPortBuffered;
 import org.harctoolbox.harchardware.comm.TcpSocketPort;
 
 /**
- * Wrapper around <a href="https://github.com/bengtmartensson/java-readline.git">java-readline</a>.
- * It consists of static members only, since java-readline is designed that way.
+ * This class allows for the bi-directional communication with in interactive command
+ * line program, using <a href="https://github.com/bengtmartensson/java-readline.git">Java Readline</a>.
+ * It consists of static members only, since the Java Readline was designed that way.
  */
 public class ReadlineCommander {
 
-    private static final int defaultPort = 23;
+    private static final int defaultPort = 23; // the Telnet port
     private static final int defaultWaitForAnswer = 1000; // milliseconds
     private static final int defaultBaudrate = 115200;
     private static final String defaultConfigFileName = null;
