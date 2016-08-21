@@ -168,7 +168,7 @@ public class ReadlineCommander {
         initialized = false;
         if (historyFile != null) {
             if (verbose)
-                System.err.println("Wrting history file \"" + historyFile + "\"");
+                System.err.println("Writing history file \"" + historyFile + "\"");
             Readline.writeHistoryFile(historyFile);
         }
         Readline.cleanup();
