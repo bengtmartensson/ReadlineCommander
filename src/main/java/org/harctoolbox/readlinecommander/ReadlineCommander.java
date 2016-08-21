@@ -174,6 +174,13 @@ public class ReadlineCommander {
         Readline.cleanup();
     }
 
+    private static void listen(FramedDevice stringCommander) throws IOException {
+        while (true) {
+            String line = stringCommander.readString(true);
+            System.out.println(line);
+        }
+    }
+
     private static String[] evalPrint(FramedDevice stringCommander, int waitForAnswer, int returnlines, String line) throws IOException {
         String[] result = stringCommander.sendString(line, returnlines <= 0 ? -1 : returnlines, waitForAnswer);
         if (result != null) {
@@ -204,8 +211,6 @@ public class ReadlineCommander {
             } catch (IOException ex) {
                 System.err.println(ex.getMessage());
             }
-
-
 
             if (line == null) { // EOF, User press Ctrl-D.
                 System.out.println();
@@ -258,12 +263,13 @@ public class ReadlineCommander {
     }
 
     private static ICommandLineDevice createCommandLineDevice(CommandLineArgs commandLineArgs) throws UnknownHostException, IOException, HarcHardwareException {
+        int timeout = commandLineArgs.listen ? 0 : commandLineArgs.timeout;
         try {
             return commandLineArgs.ip != null
                     ? new TcpSocketPort(commandLineArgs.ip, commandLineArgs.port,
-                            commandLineArgs.timeout, commandLineArgs.verbose, TcpSocketPort.ConnectionMode.keepAlive)
+                            timeout, commandLineArgs.verbose, TcpSocketPort.ConnectionMode.keepAlive)
                     : new LocalSerialPortBuffered(commandLineArgs.device, commandLineArgs.baud,
-                            commandLineArgs.timeout, commandLineArgs.verbose);
+                            timeout, commandLineArgs.verbose);
         } catch (NoSuchPortException | PortInUseException | UnsupportedCommOperationException ex) {
             throw new HarcHardwareException(ex);
         }
@@ -283,7 +289,7 @@ public class ReadlineCommander {
         @Parameter(names = {"-a", "--appname"}, description = "Appname for Readline")
         private String appname = defaultAppName;
 
-        @Parameter(names = {"-B", "--bye"}, description = "If the string given as argument is recevced, close the connection")
+        @Parameter(names = {"-B", "--bye"}, description = "If the string given as argument is received, close the connection")
         private String goodbyeWord = null;
 
         @Parameter(names = {"-b", "--baud"}, description = "Baudrate for serial devices")
@@ -294,9 +300,6 @@ public class ReadlineCommander {
 
         @Parameter(names = {"--comment"}, description = "Define a comment character sequence")
         private String comment = null;
-
-        //@Parameter(names = {"-D", "--debug"}, description = "Debug code")
-        //private int debug = 0;
 
         @Parameter(names = {"-d", "--device"}, description = "Device name, e.g. COM7: or /dev/ttyS0")
         private String device = null;
@@ -316,6 +319,9 @@ public class ReadlineCommander {
 
         @Parameter(names = {"-i", "--ip"}, description = "IP address or name")
         private String ip = null;
+
+        @Parameter(names = {"-l", "--listen"}, description = "Listen forever, just echo to stdout. Disables timeout. Press ctrl-C to stop.")
+        private boolean listen = false;
 
         @Parameter(names = {"-p", "--port"}, description = "Port number")
         private int port = defaultPort;
@@ -406,16 +412,29 @@ public class ReadlineCommander {
                 : commandLineArgs.crlf ? "{0}\r\n"
                 : "{0}";
 
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                try {
+                    close();
+                } catch (IOException ex) {
+                    System.err.println(ex);
+                }
+            }
+        });
+
         try (ICommandLineDevice commandLineDevice = createCommandLineDevice(commandLineArgs)) {
             commandLineDevice.open();
             FramedDevice stringCommander = new FramedDevice(commandLineDevice, frameString, commandLineArgs.uppercase);
-            if (commandLineArgs.arguments.isEmpty()) {
+            if (commandLineArgs.listen)
+                // Interruprint with Ctrl-C does not quite work, does not close commandLineDevice.
+                listen(stringCommander);
+            else if (commandLineArgs.arguments.isEmpty()) {
                 readEvalPrint(stringCommander, commandLineArgs.waitForAnswer, commandLineArgs.expectLines);
             } else {
                 String command = join(commandLineArgs.arguments);
                 evalPrint(stringCommander, defaultWaitForAnswer, defaultPort, command);
             }
-
         } catch (UnknownHostException ex) {
             System.err.println("Unknown host \"" + commandLineArgs.ip + "\"");
         } catch (HarcHardwareException | IOException ex) {
