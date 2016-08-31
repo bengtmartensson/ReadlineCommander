@@ -30,6 +30,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.gnu.readline.Readline;
 import org.gnu.readline.ReadlineLibrary;
 import org.harctoolbox.IrpMaster.IrpUtils;
@@ -51,7 +53,7 @@ public class ReadlineCommander {
     private static final int defaultWaitForAnswer = 1000; // milliseconds
     private static final int defaultBaudrate = 115200;
     private static final String defaultConfigFileName = null;
-    private static final String defaultHistoryFileName = ".rlchistory";
+    private static final String defaultHistoryFileName = null;
     private static final String defaultAppName = "ReadlineCommander";
     private static final String defaultPrompt = "RLC> ";
 
@@ -84,7 +86,7 @@ public class ReadlineCommander {
     /**
      * Version of init with defaults.
      */
-    public static void init() {
+    public static void init() throws IOException {
         init(defaultConfigFileName, defaultHistoryFileName, defaultPrompt, defaultAppName);
     }
 
@@ -96,7 +98,7 @@ public class ReadlineCommander {
      * @param prompt_ Prompt for Readline to use.
      * @param appName appName for readline to use when interpreting its configuration. Must be != null.
      */
-    public static void init(String confFile, String historyFile_, String prompt_, String appName) {
+    public static void init(String confFile, String historyFile_, String prompt_, String appName) throws IOException {
         historyFile = historyFile_;
         prompt = prompt_;
 
@@ -127,6 +129,13 @@ public class ReadlineCommander {
                 } else {
                     System.err.println("Cannot read readline history " + historyFile
                             + ", will try to write it when exiting anyhow.");
+                    File parent = new File(historyFile).getParentFile();
+                    if (!parent.isDirectory()) {
+                        boolean success = parent.mkdirs();
+                        if (!success)
+                            throw new IOException(parent.getCanonicalPath()
+                                    + " is not a directory or could not be created");
+                    }
                 }
             }
         } catch (UnsatisfiedLinkError ignoreMe) {
@@ -404,8 +413,24 @@ public class ReadlineCommander {
         escape = commandLineArgs.escape;
         comment = commandLineArgs.comment;
 
+        String historyFile = commandLineArgs.historyFile;
+        if (commandLineArgs.historyFile == null) {
+            // https://specifications.freedesktop.org/basedir-spec/latest/index.html
+            String xdgDataHome = System.getenv("XDG_DATA_HOME");
+            String dataHome = (xdgDataHome == null || xdgDataHome.isEmpty())
+                    ? (System.getenv("HOME") +  File.separator + ".local" + File.separator + "share")
+                    : xdgDataHome;
+            String parentDir = dataHome + File.separator + defaultAppName;
+            historyFile = parentDir + File.separator + commandLineArgs.appname + ".rl";
+        }
+
         if (commandLineArgs.arguments.isEmpty())
-            init(commandLineArgs.configFile, commandLineArgs.historyFile, commandLineArgs.prompt, commandLineArgs.appname);
+            try {
+                init(commandLineArgs.configFile, historyFile, commandLineArgs.prompt, commandLineArgs.appname);
+            } catch (IOException ex) {
+                Logger.getLogger(ReadlineCommander.class.getName()).log(Level.SEVERE, null, ex);
+                System.exit(IrpUtils.exitIoError);
+            }
 
         String frameString = commandLineArgs.carrageReturn ? "{0}\r"
                 : commandLineArgs.newLine ? "{0}\n"
