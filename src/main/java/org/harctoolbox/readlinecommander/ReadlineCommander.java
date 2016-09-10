@@ -26,6 +26,7 @@ import gnu.io.UnsupportedCommOperationException;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -57,7 +58,7 @@ public class ReadlineCommander {
     private static final String defaultAppName = "ReadlineCommander";
     private static final String defaultPrompt = "RLC> ";
 
-    private static final String versionString = "ReadlineCommander 0.1.0";
+    private static final String versionString = defaultAppName + " 0.1.0";
     private static final String quitName = "quit";
     private static final String sleepName = "sleep";
     private static final String dateName = "date";
@@ -69,22 +70,32 @@ public class ReadlineCommander {
     private static String goodbyeWord;
     private static String escape;
     private static String comment;
+    private static PrintStream stdout = null;
+    private static PrintStream stderr = null;
+    private static JCommander argumentParser;
+    private static final CommandLineArgs commandLineArgs = new CommandLineArgs();
 
-    private ReadlineCommander() {
+    /**
+     * @param newStdout the stdout to set
+     */
+    public static void setStdout(PrintStream newStdout) {
+        stdout = newStdout;
     }
 
-    private static String join(ArrayList<String> arguments) {
-        StringBuilder str = new StringBuilder();
-        for (String arg : arguments) {
-            if (str.length() > 0)
-                str.append(" ");
-            str.append(arg);
-        }
-        return str.toString();
+    /**
+     * @param newStderr the stderr to set
+     */
+    public static void setStderr(PrintStream newStderr) {
+        stderr = newStderr;
+    }
+
+    public static void setGoodbyeWord(String word) {
+        goodbyeWord = word;
     }
 
     /**
      * Version of init with defaults.
+     * @throws java.io.IOException
      */
     public static void init() throws IOException {
         init(defaultConfigFileName, defaultHistoryFileName, defaultPrompt, defaultAppName);
@@ -97,25 +108,31 @@ public class ReadlineCommander {
      * @param historyFile_ File name of the history file.
      * @param prompt_ Prompt for Readline to use.
      * @param appName appName for readline to use when interpreting its configuration. Must be != null.
+     * @throws java.io.IOException
      */
     public static void init(String confFile, String historyFile_, String prompt_, String appName) throws IOException {
+        if (stdout == null)
+            stdout = System.out;
+        if (stderr == null)
+            stderr = System.err;
+
         historyFile = historyFile_;
         prompt = prompt_;
 
         try {
             Readline.load(ReadlineLibrary.GnuReadline);
             if (verbose)
-                System.err.println("Successful load of the Gnu Readline library");
+                stderr.println("Successful load of the Gnu Readline library");
             Readline.initReadline(appName);
             if (confFile != null) {
                 if (new File(confFile).exists()) {
                     try {
                         Readline.readInitFile(confFile);
                     } catch (IOException ex) {
-                        System.err.println(ex.getMessage());
+                        stderr.println(ex.getMessage());
                     }
                 } else {
-                    System.err.println("Warning: Cannot open readline configuration " + confFile + ", ignoring");
+                    stderr.println("Warning: Cannot open readline configuration " + confFile + ", ignoring");
                 }
             }
 
@@ -124,10 +141,10 @@ public class ReadlineCommander {
                     try {
                         Readline.readHistoryFile(historyFile);
                     } catch (EOFException | UnsupportedEncodingException ex) {
-                        System.err.println("This cannot happen.");
+                        stderr.println("This cannot happen.");
                     }
                 } else {
-                    System.err.println("Cannot read readline history " + historyFile
+                    stderr.println("Cannot read readline history " + historyFile
                             + ", will try to write it when exiting anyhow.");
                     File parent = new File(historyFile).getParentFile();
                     if (!parent.isDirectory()) {
@@ -139,7 +156,7 @@ public class ReadlineCommander {
                 }
             }
         } catch (UnsatisfiedLinkError ignoreMe) {
-            System.err.println("Could not load readline lib. Using simple stdin.");
+            stderr.println("Could not load readline lib. Using simple stdin.");
         }
         initialized = true;
     }
@@ -154,7 +171,8 @@ public class ReadlineCommander {
     public static String readline() throws IOException {
         if (!initialized)
             throw new IOException("Readline not initialized");
-        String line = null;
+
+        String line;
         try {
             line = Readline.readline(prompt, false);
             int size = Readline.getHistorySize();
@@ -173,11 +191,11 @@ public class ReadlineCommander {
      */
     public static void close() throws IOException {
         if (verbose)
-            System.err.println("Closing readline");
+            stderr.println("Closing readline");
         initialized = false;
         if (historyFile != null) {
             if (verbose)
-                System.err.println("Writing history file \"" + historyFile + "\"");
+                stderr.println("Writing history file \"" + historyFile + "\"");
             Readline.writeHistoryFile(historyFile);
         }
         Readline.cleanup();
@@ -186,7 +204,7 @@ public class ReadlineCommander {
     private static void listen(FramedDevice stringCommander) throws IOException {
         while (true) {
             String line = stringCommander.readString(true);
-            System.out.println(line);
+            stdout.println(line);
         }
     }
 
@@ -195,7 +213,7 @@ public class ReadlineCommander {
         if (result != null) {
             for (String str : result)
                 if (str != null)
-                    System.out.println(str);
+                    stdout.println(str);
         }
         return result;
     }
@@ -213,16 +231,26 @@ public class ReadlineCommander {
      * takes as many lines that are available within waitForAnswer milliseconds-
      */
     public static void readEvalPrint(FramedDevice stringCommander, int waitForAnswer, int returnlines) {
+        try {
+            while (stringCommander.ready()) {
+                String line = stringCommander.readString(false);
+                stdout.println(line);
+            }
+        } catch (IOException ex) {
+            // Probably someting is really bad...
+            throw new RuntimeException(ex);
+        }
+
         while (true) {
             String line = null;
             try {
                 line = readline();
             } catch (IOException ex) {
-                System.err.println(ex.getMessage());
+                stderr.println(ex.getMessage());
             }
 
             if (line == null) { // EOF, User press Ctrl-D.
-                System.out.println();
+                stdout.println();
                 break;
             }
 
@@ -232,24 +260,24 @@ public class ReadlineCommander {
             if (escape != null && line.trim().startsWith(escape)) {
                 line = line.trim().substring(escape.length());
                 if (line.startsWith(quitName)) {
-                    System.out.println();
+                    stdout.println();
                     break;
                 } else if (line.startsWith(sleepName)) {
                     int millis = 0;
                     try {
                         millis = (int) (1000f * Double.parseDouble(line.substring(sleepName.length()).trim()));
                     } catch (NumberFormatException ex) {
-                        System.err.println(ex);
+                        stderr.println(ex);
                     }
                     try {
                         Thread.sleep(millis);
                     } catch (InterruptedException | IllegalArgumentException ex) {
-                        System.err.println(ex);
+                        stderr.println(ex);
                     }
                 } else if (line.startsWith(dateName)) {
-                    System.out.println("*** Date: " + new Date());
+                    stdout.println("*** Date: " + new Date());
                 } else {
-                    System.err.println("Unknown escape: " + escape + line);
+                    stderr.println("Unknown escape: " + escape + line);
                 }
                 continue;
             }
@@ -260,11 +288,11 @@ public class ReadlineCommander {
                         && result[result.length-1] != null && result[result.length-1].equals(goodbyeWord))
                     break;
             } catch (IOException ex) {
-                System.err.println(ex.getMessage());
+                stderr.println(ex.getMessage());
             }
         }
         if (verbose)
-            System.out.println("Readline.readEvalPrint exited");
+            stdout.println("Readline.readEvalPrint exited");
     }
 
     public static void readEvalPrint(ICommandLineDevice hardware, int waitForAnswer, int returnLines) {
@@ -280,15 +308,129 @@ public class ReadlineCommander {
                     : new LocalSerialPortBuffered(commandLineArgs.device, commandLineArgs.baud,
                             timeout, commandLineArgs.verbose);
         } catch (NoSuchPortException | PortInUseException | UnsupportedCommOperationException ex) {
-            throw new HarcHardwareException(ex);
+           throw new HarcHardwareException(ex);
         }
     }
 
     private static void usage(int exitcode) {
-        StringBuilder str = new StringBuilder();
+        StringBuilder str = new StringBuilder(256);
         argumentParser.usage(str);
-        (exitcode == IrpUtils.exitSuccess ? System.out : System.err).print(str);
+        (exitcode == IrpUtils.exitSuccess ? stdout : stderr).print(str);
         System.exit(exitcode);
+    }
+
+    private static int numberNonZeros(Object obj) {
+        return obj == null ? 0 : 1;
+    }
+
+    private static int numberNonZeros(Object... obj) {
+        int result = 0;
+        for (Object o : obj)
+            result += numberNonZeros(o);
+        return result;
+    }
+
+    // https://specifications.freedesktop.org/basedir-spec/latest/index.html
+    public static String defaultHistoryFile(String appName) {
+        String xdgDataHome = System.getenv("XDG_DATA_HOME");
+        String dataHome = (xdgDataHome == null || xdgDataHome.isEmpty())
+                ? (System.getenv("HOME") + File.separator + ".local" + File.separator + "share")
+                : xdgDataHome;
+        String parentDir = dataHome + File.separator + defaultAppName;
+        return parentDir + File.separator + appName + ".rl";
+    }
+
+    public static void main(String[] args) {
+        setStdout(System.out);
+        setStderr(System.err);
+        argumentParser = new JCommander(commandLineArgs);
+        argumentParser.setProgramName("ReadlineCommander");
+
+        try {
+            argumentParser.parse(args);
+        } catch (ParameterException ex) {
+            stderr.println(ex.getMessage());
+            usage(IrpUtils.exitUsageError);
+        }
+
+        if (commandLineArgs.helpRequested)
+            usage(IrpUtils.exitSuccess);
+
+        if (commandLineArgs.versionRequested) {
+            stdout.println(versionString);
+            stdout.println(Version.versionString);
+            stdout.println("JVM: " + System.getProperty("java.vendor") + " " + System.getProperty("java.version") + " " + System.getProperty("os.name") + "-" + System.getProperty("os.arch"));
+            stdout.println();
+            stdout.println(Version.licenseString);
+            System.exit(IrpUtils.exitSuccess);
+        }
+
+        if (numberNonZeros(commandLineArgs.ip, commandLineArgs.device) != 1) {
+            stderr.println("Exactly one of the options --ip and --device must be given");
+            System.exit(IrpUtils.exitUsageError);
+        }
+
+        verbose = commandLineArgs.verbose;
+        goodbyeWord =commandLineArgs.goodbyeWord;
+        escape = commandLineArgs.escape;
+        comment = commandLineArgs.comment;
+
+        String historyFile = commandLineArgs.historyFile == null
+                ? defaultHistoryFile(commandLineArgs.appname)
+                : commandLineArgs.historyFile;
+
+        if (commandLineArgs.arguments.isEmpty())
+            try {
+                init(commandLineArgs.configFile, historyFile, commandLineArgs.prompt, commandLineArgs.appname);
+            } catch (IOException ex) {
+                Logger.getLogger(ReadlineCommander.class.getName()).log(Level.SEVERE, null, ex);
+                System.exit(IrpUtils.exitIoError);
+            }
+
+        String frameString = commandLineArgs.carrageReturn ? "{0}\r"
+                : commandLineArgs.newLine ? "{0}\n"
+                : commandLineArgs.crlf ? "{0}\r\n"
+                : "{0}";
+
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                try {
+                    close();
+                } catch (IOException ex) {
+                    stderr.println(ex);
+                }
+            }
+        });
+
+        try (ICommandLineDevice commandLineDevice = createCommandLineDevice(commandLineArgs)) {
+            commandLineDevice.open();
+            FramedDevice stringCommander = new FramedDevice(commandLineDevice, frameString, commandLineArgs.uppercase);
+            if (commandLineArgs.listen)
+                // Interruprint with Ctrl-C does not quite work, does not close commandLineDevice.
+                listen(stringCommander);
+            else if (commandLineArgs.arguments.isEmpty()) {
+                readEvalPrint(stringCommander, commandLineArgs.waitForAnswer, commandLineArgs.expectLines);
+            } else {
+                String command = String.join(" ", commandLineArgs.arguments);
+                evalPrint(stringCommander, defaultWaitForAnswer, defaultPort, command);
+            }
+        } catch (UnknownHostException ex) {
+            stderr.println("Unknown host \"" + commandLineArgs.ip + "\"");
+        } catch (HarcHardwareException | IOException ex) {
+            stderr.println(ex);
+        } finally {
+            if (commandLineArgs.arguments.isEmpty()) {
+                try {
+                    close();
+                } catch (IOException ex) {
+                    stderr.println(ex);
+                }
+            }
+        }
+    }
+
+    private ReadlineCommander() {
     }
 
     private final static class CommandLineArgs {
@@ -363,115 +505,6 @@ public class ReadlineCommander {
         private int waitForAnswer = defaultWaitForAnswer;
 
         @Parameter(description = "[arguments to be sent]")
-        private ArrayList<String> arguments = new ArrayList<>();
-    }
-
-    private static JCommander argumentParser;
-    private static CommandLineArgs commandLineArgs = new CommandLineArgs();
-
-    private static int numberNonZeros(Object obj) {
-        return obj == null ? 0 : 1;
-    }
-
-    private static int numberNonZeros(Object... obj) {
-        int result = 0;
-        for (Object o : obj)
-            result += numberNonZeros(o);
-        return result;
-    }
-
-    public static void main(String[] args) {
-        argumentParser = new JCommander(commandLineArgs);
-        argumentParser.setProgramName("ReadlineCommander");
-
-        try {
-            argumentParser.parse(args);
-        } catch (ParameterException ex) {
-            System.err.println(ex.getMessage());
-            usage(IrpUtils.exitUsageError);
-        }
-
-        if (commandLineArgs.helpRequested)
-            usage(IrpUtils.exitSuccess);
-
-        if (commandLineArgs.versionRequested) {
-            System.out.println(versionString);
-            System.out.println(Version.versionString);
-            System.out.println("JVM: " + System.getProperty("java.vendor") + " " + System.getProperty("java.version") + " " + System.getProperty("os.name") + "-" + System.getProperty("os.arch"));
-            System.out.println();
-            System.out.println(Version.licenseString);
-            System.exit(IrpUtils.exitSuccess);
-        }
-
-        if (numberNonZeros(commandLineArgs.ip, commandLineArgs.device) != 1) {
-            System.err.println("Exactly one of the options --ip and --device must be given");
-            System.exit(IrpUtils.exitUsageError);
-        }
-
-        verbose = commandLineArgs.verbose;
-        goodbyeWord =commandLineArgs.goodbyeWord;
-        escape = commandLineArgs.escape;
-        comment = commandLineArgs.comment;
-
-        String historyFile = commandLineArgs.historyFile;
-        if (commandLineArgs.historyFile == null) {
-            // https://specifications.freedesktop.org/basedir-spec/latest/index.html
-            String xdgDataHome = System.getenv("XDG_DATA_HOME");
-            String dataHome = (xdgDataHome == null || xdgDataHome.isEmpty())
-                    ? (System.getenv("HOME") +  File.separator + ".local" + File.separator + "share")
-                    : xdgDataHome;
-            String parentDir = dataHome + File.separator + defaultAppName;
-            historyFile = parentDir + File.separator + commandLineArgs.appname + ".rl";
-        }
-
-        if (commandLineArgs.arguments.isEmpty())
-            try {
-                init(commandLineArgs.configFile, historyFile, commandLineArgs.prompt, commandLineArgs.appname);
-            } catch (IOException ex) {
-                Logger.getLogger(ReadlineCommander.class.getName()).log(Level.SEVERE, null, ex);
-                System.exit(IrpUtils.exitIoError);
-            }
-
-        String frameString = commandLineArgs.carrageReturn ? "{0}\r"
-                : commandLineArgs.newLine ? "{0}\n"
-                : commandLineArgs.crlf ? "{0}\r\n"
-                : "{0}";
-
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                try {
-                    close();
-                } catch (IOException ex) {
-                    System.err.println(ex);
-                }
-            }
-        });
-
-        try (ICommandLineDevice commandLineDevice = createCommandLineDevice(commandLineArgs)) {
-            commandLineDevice.open();
-            FramedDevice stringCommander = new FramedDevice(commandLineDevice, frameString, commandLineArgs.uppercase);
-            if (commandLineArgs.listen)
-                // Interruprint with Ctrl-C does not quite work, does not close commandLineDevice.
-                listen(stringCommander);
-            else if (commandLineArgs.arguments.isEmpty()) {
-                readEvalPrint(stringCommander, commandLineArgs.waitForAnswer, commandLineArgs.expectLines);
-            } else {
-                String command = join(commandLineArgs.arguments);
-                evalPrint(stringCommander, defaultWaitForAnswer, defaultPort, command);
-            }
-        } catch (UnknownHostException ex) {
-            System.err.println("Unknown host \"" + commandLineArgs.ip + "\"");
-        } catch (HarcHardwareException | IOException ex) {
-            System.err.println(ex);
-        } finally {
-            if (commandLineArgs.arguments.isEmpty()) {
-                try {
-                    close();
-                } catch (IOException ex) {
-                    System.err.println(ex);
-                }
-            }
-        }
+        private ArrayList<String> arguments = new ArrayList<>(8);
     }
 }
