@@ -58,7 +58,7 @@ public class ReadlineCommander {
     private static final String defaultAppName = "ReadlineCommander";
     private static final String defaultPrompt = "RLC> ";
 
-    private static final String versionString = defaultAppName + " 0.1.0";
+    private static final String versionString = defaultAppName + " 0.1.1";
     private static final String quitName = "quit";
     private static final String sleepName = "sleep";
     private static final String dateName = "date";
