@@ -36,8 +36,10 @@ import java.util.logging.Logger;
 import org.gnu.readline.Readline;
 import org.gnu.readline.ReadlineLibrary;
 import org.harctoolbox.IrpMaster.IrpUtils;
+import org.harctoolbox.harchardware.BufferedExecutor;
 import org.harctoolbox.harchardware.FramedDevice;
 import org.harctoolbox.harchardware.HarcHardwareException;
+import org.harctoolbox.harchardware.ICommandExecutor;
 import org.harctoolbox.harchardware.ICommandLineDevice;
 import org.harctoolbox.harchardware.Version;
 import org.harctoolbox.harchardware.comm.LocalSerialPortBuffered;
@@ -208,7 +210,7 @@ public class ReadlineCommander {
         }
     }
 
-    private static String[] evalPrint(FramedDevice stringCommander, int waitForAnswer, int returnlines, String line) throws IOException {
+    private static String[] evalPrint(FramedDevice stringCommander, int waitForAnswer, int returnlines, String line) throws IOException, HarcHardwareException {
         String[] result = stringCommander.sendString(line, returnlines <= 0 ? -1 : returnlines, waitForAnswer);
         if (result != null) {
             for (String str : result)
@@ -283,11 +285,18 @@ public class ReadlineCommander {
             }
 
             try {
-                String[] result = evalPrint(stringCommander, waitForAnswer, returnlines, line);
-                if (result != null && result.length > 0
-                        && result[result.length-1] != null && result[result.length-1].equals(goodbyeWord))
-                    break;
-            } catch (IOException ex) {
+                if (line.isEmpty() && stringCommander.ready()) {
+                    while (stringCommander.ready()) {
+                        String pending = stringCommander.readString(false);
+                        stdout.println(pending);
+                    }
+                } else {
+                    String[] result = evalPrint(stringCommander, waitForAnswer, returnlines, line);
+                    if (result != null && result.length > 0
+                            && result[result.length - 1] != null && result[result.length - 1].equals(goodbyeWord))
+                        break;
+                }
+            } catch (IOException | HarcHardwareException ex) {
                 stderr.println(ex.getMessage());
             }
         }
@@ -297,6 +306,10 @@ public class ReadlineCommander {
 
     public static void readEvalPrint(ICommandLineDevice hardware, int waitForAnswer, int returnLines) {
         readEvalPrint(new FramedDevice(hardware), waitForAnswer, returnLines);
+    }
+
+    public static void readEvalPrint(ICommandExecutor hardware, int waitForAnswer, int returnLines) {
+        readEvalPrint(new BufferedExecutor(hardware), waitForAnswer, returnLines);
     }
 
     private static ICommandLineDevice createCommandLineDevice(CommandLineArgs commandLineArgs) throws UnknownHostException, IOException, HarcHardwareException {
