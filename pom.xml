@@ -124,7 +124,7 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>HarcHardware</artifactId>
             <scope>compile</scope>
-            <version>1.3.1dev</version>
+            <version>1.5dev</version>
         </dependency>
         <dependency>
             <groupId>org.gnu</groupId>
