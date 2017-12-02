@@ -3,9 +3,11 @@
 # JAVA VM to use
 JAVA=java
 
-# Where libJavaReadline.so (https://github.com/bengtmartensson/java-readline)
+# Where librxtx*.so and libJavaReadline.so
+# (https://github.com/aclemons/java-readline, or
+# https://github.com/bengtmartensson/java-readline
 # is located
-LIBDIR=/usr/lib64/rxtx:/usr/local/lib64
+LIBDIR=/usr/lib64/rxtx:/usr/local/lib
 
 # Full pathname of jar
 JAR=/usr/local/share/java/ReadlineCommander-jar-with-dependencies.jar
