@@ -35,7 +35,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.gnu.readline.Readline;
 import org.gnu.readline.ReadlineLibrary;
-import org.harctoolbox.IrpMaster.IrpUtils;
 import org.harctoolbox.harchardware.BufferedExecutor;
 import org.harctoolbox.harchardware.FramedDevice;
 import org.harctoolbox.harchardware.HarcHardwareException;
@@ -44,6 +43,7 @@ import org.harctoolbox.harchardware.ICommandLineDevice;
 import org.harctoolbox.harchardware.Version;
 import org.harctoolbox.harchardware.comm.LocalSerialPortBuffered;
 import org.harctoolbox.harchardware.comm.TcpSocketPort;
+import org.harctoolbox.irp.IrpUtils;
 
 /**
  * This class allows for the bi-directional communication with in interactive command
@@ -328,7 +328,7 @@ public class ReadlineCommander {
     private static void usage(int exitcode) {
         StringBuilder str = new StringBuilder(256);
         argumentParser.usage(str);
-        (exitcode == IrpUtils.exitSuccess ? stdout : stderr).print(str);
+        (exitcode == IrpUtils.EXIT_SUCCESS ? stdout : stderr).print(str);
         System.exit(exitcode);
     }
 
@@ -363,11 +363,11 @@ public class ReadlineCommander {
             argumentParser.parse(args);
         } catch (ParameterException ex) {
             stderr.println(ex.getMessage());
-            usage(IrpUtils.exitUsageError);
+            usage(IrpUtils.EXIT_USAGE_ERROR);
         }
 
         if (commandLineArgs.helpRequested)
-            usage(IrpUtils.exitSuccess);
+            usage(IrpUtils.EXIT_SUCCESS);
 
         if (commandLineArgs.versionRequested) {
             stdout.println(versionString);
@@ -375,12 +375,12 @@ public class ReadlineCommander {
             stdout.println("JVM: " + System.getProperty("java.vendor") + " " + System.getProperty("java.version") + " " + System.getProperty("os.name") + "-" + System.getProperty("os.arch"));
             stdout.println();
             stdout.println(Version.licenseString);
-            System.exit(IrpUtils.exitSuccess);
+            System.exit(IrpUtils.EXIT_SUCCESS);
         }
 
         if (numberNonZeros(commandLineArgs.ip, commandLineArgs.device) != 1) {
             stderr.println("Exactly one of the options --ip and --device must be given");
-            System.exit(IrpUtils.exitUsageError);
+            System.exit(IrpUtils.EXIT_USAGE_ERROR);
         }
 
         verbose = commandLineArgs.verbose;
@@ -397,7 +397,7 @@ public class ReadlineCommander {
                 init(commandLineArgs.configFile, historyFile, commandLineArgs.prompt, commandLineArgs.appname);
             } catch (IOException ex) {
                 Logger.getLogger(ReadlineCommander.class.getName()).log(Level.SEVERE, null, ex);
-                System.exit(IrpUtils.exitIoError);
+                System.exit(IrpUtils.EXIT_IO_ERROR);
             }
 
         String frameString = commandLineArgs.carrageReturn ? "{0}\r"
