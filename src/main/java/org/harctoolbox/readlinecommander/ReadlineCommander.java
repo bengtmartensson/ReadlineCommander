@@ -20,9 +20,6 @@ package org.harctoolbox.readlinecommander;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
-import gnu.io.NoSuchPortException;
-import gnu.io.PortInUseException;
-import gnu.io.UnsupportedCommOperationException;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
@@ -314,15 +311,10 @@ public class ReadlineCommander {
 
     private static ICommandLineDevice createCommandLineDevice(CommandLineArgs commandLineArgs) throws UnknownHostException, IOException, HarcHardwareException {
         int timeout = commandLineArgs.listen ? 0 : commandLineArgs.timeout;
-        try {
-            return commandLineArgs.ip != null
-                    ? new TcpSocketPort(commandLineArgs.ip, commandLineArgs.port,
-                            timeout, commandLineArgs.verbose, TcpSocketPort.ConnectionMode.keepAlive)
-                    : new LocalSerialPortBuffered(commandLineArgs.device, commandLineArgs.baud,
-                            timeout, commandLineArgs.verbose);
-        } catch (NoSuchPortException | PortInUseException | UnsupportedCommOperationException ex) {
-           throw new HarcHardwareException(ex);
-        }
+        return commandLineArgs.ip != null
+            ? new TcpSocketPort(commandLineArgs.ip, commandLineArgs.port,
+                        timeout, commandLineArgs.verbose, TcpSocketPort.ConnectionMode.keepAlive)
+            : new LocalSerialPortBuffered(commandLineArgs.device, commandLineArgs.verbose, timeout, commandLineArgs.baud);
     }
 
     private static void usage(int exitcode) {
@@ -391,6 +383,9 @@ public class ReadlineCommander {
         String historyFile = commandLineArgs.historyFile == null
                 ? defaultHistoryFile(commandLineArgs.appname)
                 : commandLineArgs.historyFile;
+
+        if (commandLineArgs.rxtxLibrary != null)
+            System.setProperty("libNRJavaSerial.userlib", commandLineArgs.rxtxLibrary);
 
         if (commandLineArgs.arguments.isEmpty())
             try {
@@ -501,6 +496,9 @@ public class ReadlineCommander {
 
         @Parameter(names = {"--crlf"}, description = "End the lines with carrage return and linefeed (\\r\\n, 0x0D0x0A)")
         private boolean crlf = false;
+
+        @Parameter(names = {"--rxtxlibrary"}, description = "Filename for the serial library")
+        private String rxtxLibrary = "/usr/local/lib64/libNRJavaSerial.so";
 
         @Parameter(names = {"-t", "--timeout"}, description = "Timeout in milliseconds")
         private int timeout = defaultTimeout;

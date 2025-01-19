@@ -7,7 +7,7 @@ JAVA=java
 # (https://github.com/aclemons/java-readline, or
 # https://github.com/bengtmartensson/java-readline
 # is located
-LIBDIR=/usr/lib64/rxtx:/usr/local/lib
+LIBDIR=/usr/local/lib64
 
 # Full pathname of jar
 JAR=/usr/local/share/java/ReadlineCommander-jar-with-dependencies.jar
